@@ -1,4 +1,4 @@
-
+#!/bin/bash
 ##
 ## Setup extra space.  We prefer the LVM route, using all available PVs
 ## to create a big VG.  If that's not available, we fall back to

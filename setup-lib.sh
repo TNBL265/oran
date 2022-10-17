@@ -1,19 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 
 DIRNAME=`dirname $0`
 
 #
 # Setup our core vars
 #
-OURDIR=/local/setup
-WWWPRIV=$OURDIR
-WWWPUB=/local/profile-public
-SETTINGS=$OURDIR/settings
-LOCALSETTINGS=$OURDIR/settings.local
-TOPOMAP=$OURDIR/topomap
-BOOTDIR=/var/emulab/boot
-TMCC=/usr/local/etc/emulab/tmcc
-SWAPPER=`geni-get user_urn | cut -f4 -d+`
+. "$DIRNAME/setup-parameters.sh"
 
 if [ -z "$EUID" ]; then
     EUID=`id -u`
@@ -61,77 +53,6 @@ logtend() {
 if [ $FIRSTTIME -ne 0 ]; then
     logtstart "libfirsttime"
 fi
-
-#LOCKFILE="lockfile -1 -r -1 "
-LOCKFILE="lockfile-create --retry 65535 "
-RMLOCKFILE="lockfile-remove "
-PSWDGEN="openssl rand -hex 10"
-SSH="ssh -o StrictHostKeyChecking=no"
-SCP="scp -p -o StrictHostKeyChecking=no"
-
-#
-# Our default configuration
-#
-HEAD="node-0"
-DO_APT_INSTALL=1
-DO_APT_UPGRADE=0
-DO_APT_DIST_UPGRADE=0
-DO_APT_UPDATE=1
-UBUNTUMIRRORHOST=""
-UBUNTUMIRRORPATH=""
-KUBESPRAYREPO="https://github.com/kubernetes-incubator/kubespray.git"
-KUBESPRAYUSEVIRTUALENV=1
-KUBESPRAY_VIRTUALENV=kubespray-virtualenv
-KUBESPRAYVERSION=release-2.16
-DOCKERVERSION=
-DOCKEROPTIONS=
-KUBEVERSION=
-HELMVERSION=
-KUBENETWORKPLUGIN="calico"
-KUBEENABLEMULTUS=0
-KUBEPROXYMODE="ipvs"
-KUBEPODSSUBNET="192.168.0.0/17"
-KUBESERVICEADDRESSES="192.168.128.0/17"
-KUBEDOMETALLB=1
-KUBEACCESSIP="mgmt"
-KUBEFEATUREGATES="[EphemeralContainers=true]"
-KUBELETCUSTOMFLAGS=""
-KUBELETMAXPODS=0
-KUBEALLWORKERS=0
-SSLCERTTYPE="self"
-SSLCERTCONFIG="proxy"
-MGMTLAN="datalan-1"
-DATALAN="datalan-1"
-DATALANS="datalan-1"
-SINGLENODE_MGMT_IP=10.10.1.1
-SINGLENODE_MGMT_NETMASK=255.255.0.0
-SINGLENODE_MGMT_NETBITS=16
-SINGLENODE_MGMT_CIDR=${SINGLENODE_MGMT_IP}/${SINGLENODE_MGMT_NETBITS}
-DOLOCALREGISTRY=1
-STORAGEDIR=/storage
-DONFS=1
-NFSEXPORTDIR=$STORAGEDIR/nfs
-NFSMOUNTDIR=/nfs
-NFSASYNC=0
-BUILDSRSLTE=1
-BUILDOAI=0
-DOKPIMONDEPLOY=0
-DONEXRANDEPLOY=0
-RICBRONZE=2
-RICCHERRY=3
-RICDAWN=4
-RICVERSION=$RICCHERRY
-RICRELEASE=cherry
-INSTALLORANSC=1
-INSTALLONFSDRAN=0
-
-#
-# We have an 'admin' user that gets a random password that comes in from
-# geni-lib/rspec as a hash.
-#
-ADMIN='admin'
-ADMIN_PASS=''
-ADMIN_PASS_HASH=''
 
 #
 # Setup apt-get to not prompt us
@@ -232,71 +153,6 @@ else
 fi
 PYTHONBIN=`which $PYTHON`
 
-##
-## Grab our geni creds, and create a GENI credential cert
-##
-are_packages_installed ${PYTHON}-cryptography ${PYTHON}-future \
-    ${PYTHON}-six ${PYTHON}-lxml ${PYTHON}-pip
-success=`expr $? = 0`
-# Keep trying again with updated cache forever;
-# we must have this package.
-while [ ! $success -eq 0 ]; do
-    do_apt_update
-    $SUDO apt-get $DPKGOPTS install $APTGETINSTALLOPTS ${PYTHON}-cryptography \
-	${PYTHON}-future ${PYTHON}-six ${PYTHON}-lxml ${PYTHON}-pip
-    success=$?
-done
-
-if [ ! -e $OURDIR/geni.key ]; then
-    geni-get key > $OURDIR/geni.key
-    cat $OURDIR/geni.key | grep -q END\ .\*\PRIVATE\ KEY
-    if [ ! $? -eq 0 ]; then
-	echo "ERROR: could not get geni key; aborting!"
-	exit 1
-    fi
-fi
-if [ ! -e $OURDIR/geni.certificate ]; then
-    geni-get certificate > $OURDIR/geni.certificate
-    cat $OURDIR/geni.certificate | grep -q END\ CERTIFICATE
-    if [ ! $? -eq 0 ]; then
-	echo "ERROR: could not get geni cert; aborting!"
-	exit 1
-    fi
-fi
-
-if [ ! -e ~/.ssl/encrypted.pem ]; then
-    mkdir -p ~/.ssl
-    chmod 700 ~/.ssl
-
-    cat $OURDIR/geni.key > ~/.ssl/encrypted.pem
-    cat $OURDIR/geni.certificate >> ~/.ssl/encrypted.pem
-fi
-
-if [ ! -e $OURDIR/manifests.xml ]; then
-    $PYTHON $DIRNAME/getmanifests.py $OURDIR/manifests
-    if [ ! $? -eq 0 ]; then
-	# Fall back to geni-get
-	echo "WARNING: falling back to getting manifest from AM, not Portal -- multi-site experiments will not work fully!"
-	geni-get manifest > $OURDIR/manifests.0.xml
-    fi
-fi
-
-if [ ! -e $OURDIR/encrypted_admin_pass ]; then
-    cat $OURDIR/manifests.0.xml | perl -e '@lines = <STDIN>; $all = join("",@lines); if ($all =~ /^.+<[^:]+:password[^>]*>([^<]+)<\/[^:]+:password>.+/igs) { print $1; }' > $OURDIR/encrypted_admin_pass
-fi
-
-if [ ! -e $OURDIR/decrypted_admin_pass -a -s $OURDIR/encrypted_admin_pass ]; then
-    openssl smime -decrypt -inform PEM -inkey geni.key -in $OURDIR/encrypted_admin_pass -out $OURDIR/decrypted_admin_pass
-fi
-
-#
-# Suck in user parameters, if we haven't already.  This also pulls in
-# global labels.
-#
-if [ ! -e $OURDIR/parameters ]; then
-    $PYTHON $DIRNAME/manifest-to-parameters.py $OURDIR/manifests.0.xml > $OURDIR/parameters
-fi
-. $OURDIR/parameters
 
 #
 # Adjust our RIC version if necessary.
@@ -312,63 +168,6 @@ elif [ "$RICRELEASE" = "dawn" ]; then
     RICVERSION=$RICDAWN
 fi
 
-#
-# Grab our public addrs.
-#
-if [ ! -f $OURDIR/publicaddrs ]; then
-    $PYTHON $DIRNAME/manifest-to-publicaddrs.py $OURDIR/manifests.0.xml $CLUSTER > $OURDIR/publicaddrs.raw
-    PUBLICADDRS=`cat $OURDIR/publicaddrs.raw | sed -e 's|^\([^/]*\)/.*$|\1|' | xargs`
-    PUBLICADDRCOUNT=`cat $OURDIR/publicaddrs.raw | wc -l`
-    PUBLICADDRNETMASK=`cat $OURDIR/publicaddrs.raw | sed -e 's|^[^/]*/\(.*\)$|\1|' | head -1`
-    cat <<EOF > $OURDIR/publicaddrs
-PUBLICADDRS="$PUBLICADDRS"
-PUBLICADDRCOUNT=$PUBLICADDRCOUNT
-PUBLICADDRNETMASK="$PUBLICADDRNETMASK"
-EOF
-fi
-. $OURDIR/publicaddrs
-
-#
-# Ok, to be absolutely safe, if the ADMIN_PASS_HASH we got from params was "",
-# and if admin pass wasn't sent as an encrypted string to us, we have we have
-# to generate a random admin pass and hash it.
-#
-if [ "x${ADMIN_PASS_HASH}" = "x" ] ; then
-    DEC_ADMIN_PASS=`cat $OURDIR/decrypted_admin_pass`
-    if [ "x${DEC_ADMIN_PASS}" = "x" ]; then
-	ADMIN_PASS=`$PSWDGEN`
-	ADMIN_PASS_HASH="`echo \"${ADMIN_PASS}\" | openssl passwd -1 -stdin`"
-
-	# Save it off so we can email the user -- because nobody has the
-	# random pass we just generated!
-	echo "${ADMIN_PASS}" > $OURDIR/random_admin_pass
-    else
-	ADMIN_PASS="${DEC_ADMIN_PASS}"
-	ADMIN_PASS_HASH="`echo \"${ADMIN_PASS}\" | openssl passwd -1 -stdin`"
-    fi
-
-    #
-    # Overwrite the params.
-    #
-    echo "ADMIN_PASS='${ADMIN_PASS}'" >> $OURDIR/parameters
-    echo "ADMIN_PASS_HASH='${ADMIN_PASS_HASH}'" >> $OURDIR/parameters
-fi
-
-EXPTTYPE="ORAN/Kubernetes"
-CREATOR=`geni-get user_urn | cut -f4 -d+`
-SWAPPER=`geni-get user_urn | cut -f4 -d+`
-NODEID=`cat $BOOTDIR/nickname | cut -d . -f 1`
-PNODEID=`cat $BOOTDIR/nodeid`
-EEID=`cat $BOOTDIR/nickname | cut -d . -f 2`
-EPID=`cat $BOOTDIR/nickname | cut -d . -f 3`
-OURDOMAIN=`cat $BOOTDIR/mydomain`
-FULLDOMAIN="${EEID}.${EPID}.$OURDOMAIN"
-NFQDN="`cat $BOOTDIR/nickname`.$OURDOMAIN"
-PFQDN="`cat $BOOTDIR/nodeid`.$OURDOMAIN"
-MYIP=`cat $BOOTDIR/myip`
-EXTERNAL_NETWORK_INTERFACE=`cat $BOOTDIR/controlif`
-HOSTNAME=`cat ${BOOTDIR}/nickname | cut -f1 -d.`
-ARCH=`uname -m`
 
 # Check if our init is systemd
 dpkg-query -S /sbin/init | grep -q systemd
@@ -376,110 +175,7 @@ HAVE_SYSTEMD=`expr $? = 0`
 
 . /etc/lsb-release
 DISTRIB_MAJOR=`echo $DISTRIB_RELEASE | cut -d. -f1`
-if [ -e /etc/emulab/bossnode ]; then
-    BOSSNODE=`cat /etc/emulab/bossnode`
-fi
-if [ -n "$BOSSNODE" ]; then
-    SWAPPER_EMAIL=`geni-get -s $BOSSNODE slice_email`
-else
-    SWAPPER_EMAIL=`geni-get slice_email`
-fi
 
-#
-# Grab our topomap so we can see how many nodes we have.
-# NB: only safe to use topomap for non-fqdn things.
-#
-if [ ! -f $TOPOMAP ]; then
-    if [ -f $TOPOMAP ]; then
-	cp -p $TOPOMAP $TOPOMAP.old
-    fi
-
-    # First try via manifest; fall back to tmcc if necessary (although
-    # that will break multisite exps with >1 second cluster node(s)).
-    $PYTHON $DIRNAME/manifest-to-topomap.py $OURDIR/manifests.0.xml > $TOPOMAP
-    if [ ! $? -eq 0 ]; then
-	echo "ERROR: could not extract topomap from manifest; aborting to tmcc"
-	rm -f $TOPOMAP
-	$TMCC topomap | gunzip > $TOPOMAP
-    fi
-
-    # Filter out blockstore nodes
-    cat $TOPOMAP | grep -v '^bsnode,' > $TOPOMAP.no.bsnode
-    mv $TOPOMAP.no.bsnode $TOPOMAP
-    cat $TOPOMAP | grep -v '^bslink,' > $TOPOMAP.no.bslink
-    mv $TOPOMAP.no.bslink $TOPOMAP
-    if [ -f $TOPOMAP.old ]; then
-	diff -u $TOPOMAP.old $TOPOMAP > $TOPOMAP.diff
-	#
-	# NB: this does assume that nodes either leave all the lans, or join
-	# all the lans.  We don't try to distinguish anything else.
-	#
-	NEWNODELIST=`cat topomap.diff | sed -n -e 's/^\+\([a-zA-Z0-9\-]*\),.*:.*$/\1/p' | uniq | xargs`
-	OLDNODELIST=`cat topomap.diff | sed -n -e 's/^\-\([a-zA-Z0-9\-]*\),.*:.*$/\1/p' | uniq | xargs`
-
-	# Just remove the fqdn map and let it be recalculated below
-	rm -f $OURDIR/fqdn.map
-	rm -f $OURDIR/fqdn.physical.map
-    fi
-fi
-
-
-#
-# Create a map of node nickname to FQDN (and another one of pnode id to FQDN).
-# This supports geni multi-site experiments.
-#
-if [ \( -s $OURDIR/manifests.xml \) -a \( ! \( -s $OURDIR/fqdn.map \) \) ]; then
-    cat $OURDIR/manifests.xml | tr -d '\n' | sed -e 's/<node /\n<node /g'  | sed -n -e "s/^<node [^>]*client_id=['\"]*\([^'\"]*\)['\"].*<host name=['\"]\([^'\"]*\)['\"].*$/\1\t\2/p" > $OURDIR/fqdn.map
-    # Add a newline if we wrote anything.
-    if [ -s $OURDIR/fqdn.map ]; then
-	echo '' >> $OURDIR/fqdn.map
-    fi
-    # Filter out any blockstore nodes
-    # XXX: this strategy doesn't work, because only the NM node makes
-    # the fqdn.map file.  So, just look for bsnode for now.
-    #BSNODES=`cat /var/emulab/boot/tmcc/storageconfig | sed -n -e 's/^.* HOSTID=\([^ \t]*\) .*$/\1/p' | xargs`
-    #for bs in $BSNODES ; do
-    #	cat $OURDIR/fqdn.map | grep -v "^${bs}"$'\t' > $OURDIR/fqdn.map.tmp
-    #	mv $OURDIR/fqdn.map.tmp $OURDIR/fqdn.map
-    #done
-    # XXX: why doesn't the tab grep work here, sigh...
-    #cat $OURDIR/fqdn.map | grep -v '^bsnode'$'\t' > $OURDIR/fqdn.map.tmp
-    cat $OURDIR/fqdn.map | grep -v '^bsnode' > $OURDIR/fqdn.map.tmp
-    mv $OURDIR/fqdn.map.tmp $OURDIR/fqdn.map
-    cat $OURDIR/fqdn.map | grep -v '^fw[ \t]*' > $OURDIR/fqdn.map.tmp
-    mv $OURDIR/fqdn.map.tmp $OURDIR/fqdn.map
-    cat $OURDIR/fqdn.map | grep -v '^fw-s2[ \t]*' > $OURDIR/fqdn.map.tmp
-    mv $OURDIR/fqdn.map.tmp $OURDIR/fqdn.map
-
-    cat $OURDIR/manifests.xml | tr -d '\n' | sed -e 's/<node /\n<node /g'  | sed -n -e "s/^<node [^>]*component_id=['\"]*[a-zA-Z0-9:\+\.]*node+\([^'\"]*\)['\"].*<host name=['\"]\([^'\"]*\)['\"].*$/\1\t\2/p" > $OURDIR/fqdn.physical.map
-    # Add a newline if we wrote anything.
-    if [ -s $OURDIR/fqdn.physical.map ]; then
-	echo '' >> $OURDIR/fqdn.physical.map
-    fi
-    # Filter out any blockstore nodes
-    cat $OURDIR/fqdn.physical.map | grep -v '[ \t]bsnode\.' > $OURDIR/fqdn.physical.map.tmp
-    mv $OURDIR/fqdn.physical.map.tmp $OURDIR/fqdn.physical.map
-    # Filter out any firewall nodes
-    cat $OURDIR/fqdn.physical.map | grep -v '[ \t]*fw\.' > $OURDIR/fqdn.physical.map.tmp
-    mv $OURDIR/fqdn.physical.map.tmp $OURDIR/fqdn.physical.map
-    cat $OURDIR/fqdn.physical.map | grep -v '[ \t]*fw-s2\.' > $OURDIR/fqdn.physical.map.tmp
-    mv $OURDIR/fqdn.physical.map.tmp $OURDIR/fqdn.physical.map
-fi
-
-#
-# Grab our list of short-name and FQDN nodes.  One way or the other, we have
-# an fqdn map.  First we tried the GENI way; then the old Emulab way with
-# topomap.
-#
-NODES=`cat $OURDIR/fqdn.map | cut -f1 | sort -n | xargs`
-FQDNS=`cat $OURDIR/fqdn.map | cut -f2 | sort -n | xargs`
-NODEIPS=""
-NODECOUNT=0
-for node in $NODES ; do
-    ip=`grep "${node}-" /etc/hosts | cut -f1`
-    NODEIPS="$NODEIPS $ip"
-    NODECOUNT=`expr $NODECOUNT + 1`
-done
 
 # Construct parallel-ssh hosts files
 if [ ! -e $OURDIR/pssh.all-nodes ]; then
@@ -492,11 +188,6 @@ if [ ! -e $OURDIR/pssh.all-nodes ]; then
     done
 fi
 
-OTHERNODES=""
-for node in $NODES ; do
-    [ "$node" = "$NODEID" ] && continue
-    OTHERNODES="$OTHERNODES $node"
-done
 
 ##
 ## Setup our Ubuntu package mirror, if necessary.
@@ -547,7 +238,6 @@ if [ ! -f $OURDIR/apt-dist-upgraded -a "${DO_APT_DIST_UPGRADE}" = "1" ]; then
 fi
 
 
-
 #
 # Process our network information.
 #
@@ -571,19 +261,12 @@ EOF
 
 getnodeip() {
     node=$1
-    network=$2
-
-    if [ -z "$node" -o -z "$network" ]; then
-	echo ""
-	return
+    if [ -z "$node" ]; then
+      echo ""
+      return
     fi
-
-    ip=`sed -ne "s/^\([0-9\.]*\)[ \t]*${node}-${network}[ \t]*.*$/\1/p" /etc/hosts`
-    if [ "$network" = "$MGMTLAN" -a -z "$ip" ]; then
-	echo $SINGLENODE_MGMT_IP
-    else
-	echo $ip
-    fi
+    ip=`grep ${node} /etc/hosts | cut -f1`
+	  echo $ip
 }
 
 getnetmask() {
@@ -678,20 +361,6 @@ EOF
 ##
 ## Util functions.
 ##
-
-getfqdn() {
-    n=$1
-    fqdn=`cat $OURDIR/fqdn.map | grep -E "$n\s" | cut -f2`
-    echo $fqdn
-}
-
-getcontrolip() {
-    n=$1
-    fqdn=`getfqdn $n`
-    ip=`host -4 $fqdn | sed -nre 's/.* has address ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)$/\1/p'`
-    echo $ip
-}
-
 service_init_reload() {
     if [ ${HAVE_SYSTEMD} -eq 1 ]; then
 	$SUDO systemctl daemon-reload
@@ -821,6 +490,16 @@ get_url() {
 	/bin/false
     fi
 }
+
+# Must have these packages
+maybe_install_packages curl
+maybe_install_packages ethtool
+maybe_install_packages pssh
+maybe_install_packages autoconf
+maybe_install_packages libtool
+maybe_install_packages bison
+maybe_install_packages flex
+maybe_install_packages byacc
 
 # Time logging
 if [ $FIRSTTIME -ne 0 ]; then

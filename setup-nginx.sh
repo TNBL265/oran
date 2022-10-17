@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -x
 
@@ -20,7 +20,7 @@ if [ ! $? -eq 0 ]; then
     maybe_install_packages nginx
 fi
 
-echo "$ADMIN_PASS" | htpasswd -n -i admin | $SUDO tee -a /etc/nginx/htpasswd
+htpasswd -n -i admin | $SUDO tee -a /etc/nginx/htpasswd
 $SUDO chown www-data:root /etc/nginx/htpasswd
 $SUDO chmod 660 /etc/nginx/htpasswd
 

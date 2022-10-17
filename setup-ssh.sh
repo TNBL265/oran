@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ##
 ## Setup a ssh key on the calling node *for the calling uid*, and
@@ -28,11 +28,8 @@ sshkeyscan() {
     ssh-keyscan $NODES >> ~/.ssh/known_hosts
     chmod 600 ~/.ssh/known_hosts
     for node in $NODES ; do
-	fqdn=`getfqdn $node`
-	publicip=`dig +noall +answer $fqdn A | sed -ne 's/^.*IN[ \t]*A[ \t]*\([0-9\.]*\)$/\1/p'`
-	mgmtip=`getnodeip $node $MGMTLAN`
-	echo "$publicip $fqdn,$publicip"
-	echo "$mgmtip $node,$node-$MGMTLAN,$mgmtip"
+	mgmtip=`getnodeip $node`
+	echo "$mgmtip $node,$mgmtip"
     done | ssh-keyscan -4 -f - >> ~/.ssh/known_hosts
 }
 
@@ -41,31 +38,6 @@ KEYNAME=id_rsa
 # Remove it if it exists...
 rm -f ~/.ssh/${KEYNAME} ~/.ssh/${KEYNAME}.pub
 
-##
-## Figure out our strategy.  Are we using the new geni_certificate and
-## geni_key support to generate the same keypair on each host, or not.
-##
-geni-get key > $OURDIR/$KEYNAME
-chmod 600 $OURDIR/${KEYNAME}
-if [ -s $OURDIR/${KEYNAME} ] ; then
-    ssh-keygen -f $OURDIR/${KEYNAME} -y > $OURDIR/${KEYNAME}.pub
-    chmod 600 $OURDIR/${KEYNAME}.pub
-    mkdir -p ~/.ssh
-    chmod 700 ~/.ssh
-    cp -p $OURDIR/${KEYNAME} $OURDIR/${KEYNAME}.pub ~/.ssh/
-    ps axwww > $OURDIR/ps.txt
-    cat $OURDIR/${KEYNAME}.pub >> ~/.ssh/authorized_keys
-    chmod 600 ~/.ssh/authorized_keys
-    sshkeyscan
-    logtend "ssh-$EUID"
-    touch $OURDIR/setup-ssh-$EUID-done
-    exit 0
-fi
-
-##
-## If geni calls are not available, make ourself a keypair; this gets copied
-## to other roots' authorized_keys.
-##
 if [ ! -f ~/.ssh/${KEYNAME} ]; then
     ssh-keygen -t rsa -f ~/.ssh/${KEYNAME} -N ''
 fi

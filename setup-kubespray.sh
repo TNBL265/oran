@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -x
 
@@ -12,11 +12,6 @@ fi
 logtstart "kubespray"
 
 maybe_install_packages dma
-maybe_install_packages mailutils
-echo "$PFQDN" | $SUDO tee /etc/mailname
-sleep 2
-echo "Your ${EXPTTYPE} instance is setting up on $NFQDN ." \
-    |  mail -s "${EXPTTYPE} Instance Setting Up" ${SWAPPER_EMAIL} &
 
 # First, we need yq.
 are_packages_installed yq
@@ -283,14 +278,6 @@ kubectl_localhost: true
 kubeconfig_localhost: true
 docker_options: "$DOCKOPTS ${DOCKEROPTIONS}"
 metrics_server_enabled: true
-kube_basic_auth: true
-kube_api_pwd: "$ADMIN_PASS"
-kube_users:
-  admin:
-    pass: "{{kube_api_pwd}}"
-    role: admin
-    groups:
-      - system:masters
 EOF
 #kube_api_anonymous_auth: false
 

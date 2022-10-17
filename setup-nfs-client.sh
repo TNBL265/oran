@@ -27,7 +27,7 @@ service_enable rpcbind
 service_start rpcbind
 
 dataip=`getnodeip $HEAD $DATALAN`
-prefix=`getnetmaskprefix $DATALAN`
+prefix=$SUBNETMARK
 
 while ! (rpcinfo -s $dataip | grep -q nfs); do
     echo "Waiting for NFS server $dataip..."

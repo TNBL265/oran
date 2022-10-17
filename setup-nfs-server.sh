@@ -29,18 +29,19 @@ $SUDO mkdir -p $NFSEXPORTDIR
 $SUDO chmod 755 $NFSEXPORTDIR
 
 dataip=`getnodeip $HEAD $DATALAN`
-prefix=`getnetmaskprefix $DATALAN`
-networkip=`getnetworkip $HEAD $DATALAN`
+prefix=$SUBNETMARK
+#networkip=`getnetworkip $HEAD $DATALAN`
 
 syncopt="sync"
 if [ -n "$NFSASYNC" -a $NFSASYNC -eq 1 ]; then
     syncopt="async"
 fi
-echo "$NFSEXPORTDIR $networkip/$prefix(rw,$syncopt,no_root_squash,no_subtree_check,fsid=0)" | $SUDO tee -a /etc/exports
+echo "$NFSEXPORTDIR $dataip/$prefix(rw,$syncopt,no_root_squash,no_subtree_check,fsid=0)" | $SUDO tee -a /etc/exports
 
 echo "OPTIONS=\"-l -h 127.0.0.1 -h $dataip\"" | $SUDO tee /etc/default/rpcbind
 $SUDO sed -i.bak -e "s/^rpcbind/#rpcbind/" /etc/hosts.deny
 echo "rpcbind: ALL EXCEPT 127.0.0.1, $networkip/$prefix" | $SUDO tee -a /etc/hosts.deny
+echo "rpcbind: ALL" | $SUDO tee -a /etc/hosts.allow
 
 service_enable rpcbind
 service_restart rpcbind

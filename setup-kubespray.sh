@@ -83,11 +83,10 @@ mkdir -p $INVDIR/host_vars
 
 HEAD_MGMT_IP=`getnodeip $HEAD $MGMTLAN`
 HEAD_DATA_IP=`getnodeip $HEAD $DATALAN`
-DATA_IP_REGEX=`getnetworkregex $HEAD $DATALAN`
 INV=$INVDIR/inventory.ini
 
 echo '[all]' > $INV
-for node in $NODES ; do
+for node in "${NODES[@]}" ; do
     mgmtip=`getnodeip $node $MGMTLAN`
     dataip=`getnodeip $node $DATALAN`
     if [ "$KUBEACCESSIP" = "mgmt" ]; then
@@ -101,7 +100,7 @@ for node in $NODES ; do
 done
 # The first 2 nodes are kube-master.
 echo '[kube-master]' >> $INV
-for node in `echo $NODES | cut -d ' ' -f-2` ; do
+for node in `echo "${NODES[@]}" | cut -d ' ' -f-2` ; do
     echo "$node" >> $INV
 done
 # The first 3 nodes are etcd.
@@ -110,7 +109,7 @@ if [ $NODECOUNT -lt 3 ]; then
     etcdcount=1
 fi
 echo '[etcd]' >> $INV
-for node in `echo $NODES | cut -d ' ' -f-$etcdcount` ; do
+for node in `echo "${NODES[@]}" | cut -d ' ' -f-$etcdcount` ; do
     echo "$node" >> $INV
 done
 # The last 2--N nodes are kube-node, unless there is only one node, or
@@ -120,7 +119,7 @@ if [ $KUBEALLWORKERS -eq 1 -o "$NODES" = `echo $NODES | cut -d ' ' -f2` ]; then
     kubenodecount=1
 fi
 echo '[kube-node]' >> $INV
-for node in `echo $NODES | cut -d ' ' -f${kubenodecount}-` ; do
+for node in `echo "${NODES[@]}" | cut -d ' ' -f${kubenodecount}-` ; do
     echo "$node" >> $INV
 done
 cat <<EOF >> $INV

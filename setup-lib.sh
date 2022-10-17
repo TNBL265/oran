@@ -120,6 +120,16 @@ maybe_install_packages() {
     fi
 }
 
+# Must have these packages
+maybe_install_packages curl
+maybe_install_packages ethtool
+maybe_install_packages pssh
+maybe_install_packages autoconf
+maybe_install_packages libtool
+maybe_install_packages bison
+maybe_install_packages flex
+maybe_install_packages byacc
+
 ##
 ## Figure out the system python version.
 ##
@@ -181,7 +191,7 @@ DISTRIB_MAJOR=`echo $DISTRIB_RELEASE | cut -d. -f1`
 if [ ! -e $OURDIR/pssh.all-nodes ]; then
     echo > $OURDIR/pssh.all-nodes
     echo > $OURDIR/pssh.other-nodes
-    for node in $NODES ; do
+    for node in "${NODES[@]}" ; do
 	echo $node >> $OURDIR/pssh.all-nodes
 	[ "$node" = "$NODEID" ] && continue
 	echo $node >> $OURDIR/pssh.other-nodes
@@ -260,103 +270,28 @@ EOF
 }
 
 getnodeip() {
-    node=$1
-    if [ -z "$node" ]; then
+    DONE=0
+    if [ -z "$1" ]; then
       echo ""
       return
     fi
-    ip=`grep ${node} /etc/hosts | cut -f1`
-	  echo $ip
+    i=0
+    for node in "${NODES[@]}" ; do
+        if [ "$node" = "$1" ]; then
+            DONE=1
+            break
+        else
+            (( i++ ))
+        fi
+    done
+    if [ $DONE -eq 0 ]; then
+        echo "Fail to get node ip"
+        exit 1
+    fi
+    ip=${NODESIP[$i]}
+	echo $ip
 }
 
-getnetmask() {
-    network=$1
-
-    if [ -z "$network" ]; then
-	echo ""
-	return
-    fi
-
-    nm=`sed -ne "s/^${network},\([0-9\.]*\),.*$/\1/p" $TOPOMAP`
-    if [ "$network" = "$MGMTLAN" -a -z "$nm" ]; then
-	echo $SINGLENODE_MGMT_NETMASK
-    else
-	echo $nm
-    fi
-}
-
-getnetmaskprefix() {
-    netmask=`getnetmask $1`
-    if [ -z "$netmask" ]; then
-	echo ""
-	return
-    fi
-    prefix=`netmask2prefix $netmask`
-    echo $prefix
-}
-
-getnetworkip() {
-    node=$1
-    network=$2
-    nodeip=`getnodeip $node $network`
-    netmask=`getnetmask $network`
-
-    IFS=.
-    read -r i1 i2 i3 i4 <<EOF
-$nodeip
-EOF
-    read -r m1 m2 m3 m4 <<EOF
-$netmask
-EOF
-    unset IFS
-    printf "%d.%d.%d.%d\n" "$((i1 & m1))" "$((i2 & m2))" "$((i3 & m3))" "$((i4 & m4))"
-}
-
-#
-# Note that the `.`s are escaped enough to make it from shell into yaml into
-# ansible and eventually into the golang regexp used by flanneld.  Not
-# generic.
-#
-getnetworkregex() {
-    node=$1
-    network=$2
-    nodeip=`getnodeip $node $network`
-    netmask=`getnetmask $network`
-
-    IFS=.
-    read -r i1 i2 i3 i4 <<EOF
-$nodeip
-EOF
-    read -r m1 m2 m3 m4 <<EOF
-$netmask
-EOF
-    unset IFS
-    REGEX=""
-    if [ $m1 -ge 255 ]; then
-	REGEX="${REGEX}$i1"
-    else
-	REGEX="${REGEX}[0-9]{1,3}"
-    fi
-    REGEX="${REGEX}\\\\\\\\."
-    if [ $m2 -ge 255 ]; then
-	REGEX="${REGEX}$i2"
-    else
-	REGEX="${REGEX}[0-9]{1,3}"
-    fi
-    REGEX="${REGEX}\\\\\\\\."
-    if [ $m3 -ge 255 ]; then
-	REGEX="${REGEX}$i3"
-    else
-	REGEX="${REGEX}[0-9]{1,3}"
-    fi
-    REGEX="${REGEX}\\\\\\\\."
-    if [ $m4 -ge 255 ]; then
-	REGEX="${REGEX}$i4"
-    else
-	REGEX="${REGEX}[0-9]{1,3}"
-    fi
-    echo "$REGEX"
-}
 
 ##
 ## Util functions.
@@ -490,16 +425,6 @@ get_url() {
 	/bin/false
     fi
 }
-
-# Must have these packages
-maybe_install_packages curl
-maybe_install_packages ethtool
-maybe_install_packages pssh
-maybe_install_packages autoconf
-maybe_install_packages libtool
-maybe_install_packages bison
-maybe_install_packages flex
-maybe_install_packages byacc
 
 # Time logging
 if [ $FIRSTTIME -ne 0 ]; then

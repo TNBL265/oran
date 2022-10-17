@@ -6,13 +6,13 @@ export SRC=`dirname $0`
 cd $SRC
 . $SRC/setup-lib.sh
 
-ALLNODESCRIPTS="setup-ssh.sh setup-disk-space.sh"
-HEADNODESCRIPTS="setup-nfs-server.sh setup-nginx.sh setup-kubespray.sh setup-kubernetes-extra.sh"
+ALLNODESCRIPTS="setup-disk-space.sh"
+HEADNODESCRIPTS="setup-nfs-server.sh setup-ssh.sh setup-nginx.sh setup-kubespray.sh setup-kubernetes-extra.sh"
 if [ $INSTALLORANSC -eq 1 ]; then
     HEADNODESCRIPTS="${HEADNODESCRIPTS} setup-oran.sh setup-xapp-kpimon.sh setup-xapp-nexran.sh"
 fi
 HEADNODESCRIPTS="${HEADNODESCRIPTS} setup-ran.sh"
-WORKERNODESCRIPTS="setup-nfs-client.sh"
+WORKERNODESCRIPTS="setup-nfs-client.sh setup-ssh.sh"
 
 # Don't run setup-driver.sh twice
 if [ -f $OURDIR/setup-driver-done ]; then

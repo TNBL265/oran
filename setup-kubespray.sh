@@ -11,9 +11,9 @@ fi
 
 logtstart "kubespray"
 
-maybe_install_packages dma
-
 # First, we need yq.
+maybe_install_packages gnupg
+maybe_install_packages software-properties-common
 are_packages_installed yq
 if [ ! $? -eq 1 ]; then
     if [ ! "$ARCH" = "aarch64" ]; then
@@ -25,9 +25,6 @@ fi
 which yq
 if [ ! $? -eq 0 ]; then
     fname=yq_linux_amd64
-    if [ "$ARCH" = "aarch64" ]; then
-	fname=yq_linux_arm64
-    fi
     curl -L -o /tmp/$fname.tar.gz \
 	https://github.com/mikefarah/yq/releases/download/v4.13.2/$fname.tar.gz
     tar -xzvf /tmp/$fname.tar.gz -C /tmp
@@ -81,20 +78,14 @@ mkdir -p $INVDIR
 cp -pR kubespray/inventory/sample/group_vars $INVDIR
 mkdir -p $INVDIR/host_vars
 
-HEAD_MGMT_IP=`getnodeip $HEAD $MGMTLAN`
-HEAD_DATA_IP=`getnodeip $HEAD $DATALAN`
+HEAD_MGMT_IP=`getnodeip $HEAD`
+HEAD_DATA_IP=`getnodeip $HEAD`
 INV=$INVDIR/inventory.ini
 
 echo '[all]' > $INV
 for node in "${NODES[@]}" ; do
-    mgmtip=`getnodeip $node $MGMTLAN`
-    dataip=`getnodeip $node $DATALAN`
-    if [ "$KUBEACCESSIP" = "mgmt" ]; then
-	accessip="$mgmtip"
-    else
-	accessip=`getcontrolip $node`
-    fi
-    echo "$node ansible_host=$mgmtip ip=$dataip access_ip=$accessip" >> $INV
+    mgmtip=`getnodeip $node`
+    echo "$node ansible_host=$mgmtip ip=$mgmtip access_ip=$mgmtip" >> $INV
 
     touch $INVDIR/host_vars/$node.yml
 done
@@ -133,11 +124,10 @@ if [ $NODECOUNT -eq 1 ]; then
     # works fine.  We need to fix things up because there is nothing in
     # /etc/hosts, nor have ssh keys been scanned and placed in
     # known_hosts.
-    ip=`getnodeip $HEAD $MGMTLAN`
-    nm=`getnetmask $MGMTLAN`
-    prefix=`netmask2prefix $nm`
+    ip=`getnodeip $HEAD`
+    prefix=$SUBNETMARK
     cidr=$ip/$prefix
-    echo "$ip $HEAD $HEAD-$MGMTLAN" | $SUDO tee -a /etc/hosts
+    echo "$ip $HEAD" | $SUDO tee -a /etc/hosts
     $SUDO ip link add type dummy name dummy0
     $SUDO ip addr add $cidr dev dummy0
     $SUDO ip link set dummy0 up
@@ -214,11 +204,6 @@ kube_network_plugin: calico
 docker_iptables_enabled: true
 calico_ip_auto_method: "can-reach=$HEAD_DATA_IP"
 EOF
-elif [ "$KUBENETWORKPLUGIN" = "flannel" ]; then
-cat <<EOF >> $OVERRIDES
-kube_network_plugin: flannel
-flannel_interface_regexp: '$DATA_IP_REGEX'
-EOF
 elif [ "$KUBENETWORKPLUGIN" = "weave" ]; then
 cat <<EOF >> $OVERRIDES
 kube_network_plugin: weave
@@ -264,13 +249,8 @@ fi
 # Add a bunch of options most people will find useful.
 #
 DOCKOPTS='--insecure-registry={{ kube_service_addresses }} {{ docker_log_opts }}'
-if [ "$MGMTLAN" = "$DATALANS" ]; then
-    DOCKOPTS="--insecure-registry=`getnodeip $HEAD $MGMTLAN`/`getnetmaskprefix $MGMTLAN` $DOCKOPTS"
-else
-    for lan in $MGMTLAN $DATALANS ; do
-	DOCKOPTS="--insecure-registry=`getnodeip $HEAD $lan`/`getnetmaskprefix $lan` $DOCKOPTS"
-    done
-fi
+DOCKOPTS="--insecure-registry=`getnodeip $HEAD`/$SUBNETMARK $DOCKOPTS"
+
 cat <<EOF >> $OVERRIDES
 docker_dns_servers_strict: false
 kubectl_localhost: true
@@ -281,80 +261,11 @@ EOF
 #kube_api_anonymous_auth: false
 
 #
-# Add MetalLB support.
-#
-METALLB_PLAYBOOK=
-if [ "$KUBEDOMETALLB" = "1" -a $PUBLICADDRCOUNT -gt 0 ]; then
-    if [ $KUBESPRAYVERSION = "release-2.13" ]; then
-	echo "kube_proxy_strict_arp: true" >> $INVDIR/group_vars/k8s-cluster/k8s-cluster.yml
-	METALLB_PLAYBOOK=contrib/metallb/metallb.yml
-	cat kubespray/contrib/metallb/roles/provision/defaults/main.yml | grep -v -- --- >> $OVERRIDES
-	echo "metallb:" >/tmp/metallb.yml
-	mi=0
-	for pip in $PUBLICADDRS ; do
-	    if [ $mi -eq 0 ]; then
-		cat <<EOF >>/tmp/metallb.yml
-  ip_range:
-    - "$pip-$pip"
-  protocol: "layer2"
-EOF
-	    else
-		if [ $mi -eq 1 ]; then
-		    cat <<EOF >>/tmp/metallb.yml
-  additional_address_pools:
-EOF
-		fi
-		cat <<EOF >>/tmp/metallb.yml
-    kube_service_pool_$mi:
-      ip_range:
-        - "$pip-$pip"
-      protocol: "layer2"
-      auto_assign: true
-EOF
-	    fi
-	    mi=`expr $mi + 1`
-	done
-	yq m --inplace --overwrite $OVERRIDES /tmp/metallb.yml
-	rm -f /tmp/metallb.yml
-    else
-	echo "kube_proxy_strict_arp: true" >> $OVERRIDES
-	cat <<EOF >> $OVERRIDES
-metallb_enabled: true
-metallb_speaker_enabled: true
-EOF
-	mi=0
-	for pip in $PUBLICADDRS ; do
-	    if [ $mi -eq 0 ]; then
-		cat <<EOF >> $OVERRIDES
-metallb_ip_range:
-  - "$pip-$pip"
-metallb_protocol: "layer2"
-EOF
-	    else
-		if [ $mi -eq 1 ]; then
-		    cat <<EOF >> $OVERRIDES
-metallb_additional_address_pools:
-EOF
-		fi
-		cat <<EOF >> $OVERRIDES
-  kube_service_pool_$mi:
-    ip_range:
-      - "$pip-$pip"
-    protocol: "layer2"
-    auto_assign: true
-EOF
-	    fi
-	    mi=`expr $mi + 1`
-	done
-    fi
-fi
-
-#
 # Run ansible to build our kubernetes cluster.
 #
 cd $OURDIR/kubespray
-ansible-playbook -i $INVDIR/inventory.ini \
-    cluster.yml $METALLB_PLAYBOOK -e @${OVERRIDES} -b -v
+ansible-playbook -i $INVDIR/inventory.ini cluster.yml -e @${OVERRIDES} -b -v \
+    --private-key=~/.ssh/id_rsa
 
 if [ ! $? -eq 0 ]; then
     cd ..
@@ -367,37 +278,7 @@ $SUDO rm -rf /root/.kube
 $SUDO mkdir -p /root/.kube
 $SUDO cp -p $INVDIR/artifacts/admin.conf /root/.kube/config
 
-[ -d /users/$SWAPPER/.kube ] && rm -rf /users/$SWAPPER/.kube
-mkdir -p /users/$SWAPPER/.kube
-cp -p $INVDIR/artifacts/admin.conf /users/$SWAPPER/.kube/config
-chown -R $SWAPPER /users/$SWAPPER/.kube
-
 kubectl wait pod -n kube-system --for=condition=Ready --all
-
-#
-# If helm is not installed, do that manually.  Seems that there is a
-# kubespray bug (release-2.11) that causes this.
-#
-which helm
-if [ ! $? -eq 0 -a -n "${HELM_VERSION}" ]; then
-    wget https://storage.googleapis.com/kubernetes-helm/helm-${HELM_VERSION}-linux-amd64.tar.gz
-    tar -xzvf helm-${HELM_VERSION}-linux-amd64.tar.gz
-    $SUDO mv linux-amd64/helm /usr/local/bin/helm
-
-    helm init --upgrade --force-upgrade --stable-repo-url "https://charts.helm.sh/stable"
-    kubectl create serviceaccount --namespace kube-system tiller
-    kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
-    kubectl patch deploy --namespace kube-system tiller-deploy -p '{"spec":{"template":{"spec":{"serviceAccount":"tiller"}}}}'
-    helm init --service-account tiller --upgrade
-    while [ 1 ]; do
-	helm ls
-	if [ $? -eq 0 ]; then
-	    break
-	fi
-	sleep 4
-    done
-    kubectl wait pod -n kube-system --for=condition=Ready --all
-fi
 
 logtend "kubespray"
 touch $OURDIR/kubespray-done

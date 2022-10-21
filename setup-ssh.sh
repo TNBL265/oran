@@ -21,8 +21,6 @@ fi
 
 logtstart "ssh-$EUID"
 
-KEYNAME=id_rsa
-
 # Remove it if it exists...
 rm -f ~/.ssh/${KEYNAME} ~/.ssh/${KEYNAME}.pub
 

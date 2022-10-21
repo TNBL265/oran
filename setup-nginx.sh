@@ -11,7 +11,7 @@ fi
 
 logtstart "nginx"
 
-maybe_install_packages nginx apache2-utils
+maybe_install_packages nginx
 # Handle case where nginx won't start because the default site (which is
 # enabled!) needs port 80, and apache might be listening there.
 #rm -f /etc/nginx/sites-available/default \
@@ -19,10 +19,6 @@ maybe_install_packages nginx apache2-utils
 if [ ! $? -eq 0 ]; then
     maybe_install_packages nginx
 fi
-
-htpasswd -n -i admin | $SUDO tee -a /etc/nginx/htpasswd
-$SUDO chown www-data:root /etc/nginx/htpasswd
-$SUDO chmod 660 /etc/nginx/htpasswd
 
 $SUDO mkdir /var/www/profile-private
 $SUDO chown www-data /var/www/profile-private
@@ -39,8 +35,6 @@ server {
         server_name _;
         location / {
                  autoindex on;
-                 auth_basic "profile-private";
-                 auth_basic_user_file /etc/nginx/htpasswd;
         }
 }
 EOF

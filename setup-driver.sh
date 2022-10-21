@@ -2,7 +2,7 @@
 
 set -x
 
-export SRC=`dirname $0`
+export SRC="/local/repository"
 cd $SRC
 . $SRC/setup-lib.sh
 
@@ -11,7 +11,7 @@ HEADNODESCRIPTS="setup-nfs-server.sh setup-ssh.sh setup-nginx.sh setup-kubespray
 if [ $INSTALLORANSC -eq 1 ]; then
     HEADNODESCRIPTS="${HEADNODESCRIPTS} setup-oran.sh setup-xapp-kpimon.sh setup-xapp-nexran.sh"
 fi
-HEADNODESCRIPTS="${HEADNODESCRIPTS} setup-ran.sh"
+HEADNODESCRIPTS="${HEADNODESCRIPTS} setup-e2-bindings.sh setup-asn1c.sh setup-srslte.sh"
 WORKERNODESCRIPTS="setup-nfs-client.sh setup-ssh.sh"
 
 # Don't run setup-driver.sh twice

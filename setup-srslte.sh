@@ -11,12 +11,6 @@ if [ -f $OURDIR/setup-srslte-done ]; then
     exit 0
 fi
 
-cd $OURDIR
-
-$SRC/setup-e2-bindings.sh
-
-$SRC/setup-asn1c.sh
-
 logtstart "srslte"
 
 #

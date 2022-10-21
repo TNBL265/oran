@@ -13,6 +13,7 @@ fi
 
 logtstart "asn1c"
 
+maybe_install_packages build-essential
 cd $OURDIR
 rm -rf $OURDIR/asn1c
 # GIT_SSL_NO_VERIFY=true

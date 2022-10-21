@@ -118,6 +118,8 @@ if [ -n "$DONEXRANDEPLOY" -a $DONEXRANDEPLOY -eq 1 ]; then
 	--data-raw '{"xappName": "nexran"}'
 fi
 
+maybe_install_packages iperf
+
 logtend "xapp-nexran"
 touch $OURDIR/setup-xapp-nexran-done
 
